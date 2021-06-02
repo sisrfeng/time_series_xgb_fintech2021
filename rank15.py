@@ -2,7 +2,21 @@
 # -*- coding: utf-8 -*-
 #  https://www.zhihu.com/people/z285098346/posts
 import time
-t1 = time.perf_counter() 
+t1 = time.perf_counter()
+
+from icecream import ic
+
+import logging
+#声明了一个 Logger 对象
+logger = logging.getLogger('wf_logger_name')
+import sys
+logger.setLevel(logging.DEBUG)
+# 创建一个流处理器handler并将其日志级别设置为DEBUG
+handler = logging.FileHandler('./wf.log', mode='w', encoding=None, delay=False)
+#  handler.setLevel(logging.CRITICAL)  ; handler.setFormatter( logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='Day_%d %H:%M:%S') )
+handler.setLevel(logging.CRITICAL)  ; handler.setFormatter( logging.Formatter(fmt='[%(asctime)s] - %(message)s', datefmt='Day_%d %H:%M:%S') )
+logger.addHandler(handler)
+
 
 import datetime
 import math
@@ -67,7 +81,7 @@ def timer(x):
         return 0
 def date_feature(data):
     data['type']=data['WKD_TYP_CD'].map({'WN':0,'SN': 1, 'NH': 1, 'SS': 1, 'WS': 0})
-    data['date']=pd.to_datetime(data['date'])     # 变成形如 2020-11-30 
+    data['date']=pd.to_datetime(data['date'])     # 变成形如 2020-11-30
     data['dayofweek']=data['date'].dt.dayofweek+1
     data['day']=data['date'].dt.day
     data['month']=data['date'].dt.month
@@ -81,7 +95,7 @@ def date_feature(data):
     data['abs_period']=data['periods'].apply(lambda x:abs(x-24))
     # +1 避免出现0？
     data['abs_week']=data['dayofweek'].apply(lambda x:0 if x in [6,7] else abs(x-3)+1)
-    data['work_time1']=data['periods'].apply(timer)
+    data['work_time']=data['periods'].apply(timer)
     data['sin_period']=data['periods'].apply(lambda x:math.sin(x*math.pi/48)) #可以更好刻画每天的周期？
     # q1,q2：特征交叉，强特增益。（效果不明显，不过其他比赛可以用）
     data['q1']=data['abs_period']**2+data['abs_week']**2
@@ -107,7 +121,7 @@ def xgb_model_A(train_x, train_y, test_x,test_y):
 
 
     for i, (train_index, val_index) in enumerate(kf.split(train_x, train_y)):
-        print("Fold", i)
+        #  print("Fold", i)
         X = train_x[train_index]
         Y = train_y[train_index]
         fold_x = train_x[val_index]
@@ -122,12 +136,10 @@ def xgb_model_A(train_x, train_y, test_x,test_y):
             cv_pre = model.predict(xgb.DMatrix(fold_x),ntree_limit = model.best_iteration)
             # 每次交叉验证，都在要提交的数据集上预测，最后取mean
             test_pre_total[i, :] = model.predict(xgb.DMatrix(test_x),ntree_limit = model.best_iteration)
-            
+
             cv_scores.append(mean_squared_error (fold_y, cv_pre))
             cv_rounds.append(model.best_iteration)
-    print("error_score is:", cv_scores)
     test_pre[:] = test_pre_total.mean(axis=0)
-    print("val_mean:" , np.mean(cv_scores))
     return test_pre
 def my_mape(real_value, pre_value):
     real_value, pre_value = np.array(real_value), np.array(pre_value)
@@ -150,10 +162,9 @@ def xgb_model_B(train_x, train_y, test_x, test_y):
     total_pre_test = np.zeros((folds, test_x.shape[0]))
     cv_scores = []
     cv_rounds = []
-    
+
 
     for i, (cv_train_index, cv_val_index) in enumerate(kf.split(train_x, train_y)):
-        print("Fold", i)
         X = train_x[cv_train_index]
         Y = train_y[cv_train_index]
         fol_x = train_x[cv_val_index]
@@ -172,12 +183,10 @@ def xgb_model_B(train_x, train_y, test_x, test_y):
             cv_scores.append(mean_squared_error (fol_y, pre))
             cv_rounds.append(model.best_iteration)
             total_pre_test[i, :] = pred
-    print("error_score is:", cv_scores)
     test_pre[:] =total_pre_test.mean(axis=0)
     #-----------------------------------------
-    print("val_mean:" , np.mean(cv_scores))
 
-    #todo 
+    #todo
     '''
     # 现在是多个模型都在11月预测一遍，取平均
     # 交叉验证后，在所有训练数据上训练，在11月算指标
@@ -188,9 +197,9 @@ def xgb_model_B(train_x, train_y, test_x, test_y):
                         early_stopping_rounds=early_stopping_rounds
                         )
     wf_pred = model.predict(xgb.DMatrix(test_x),ntree_limit = model.best_iteration)
-    #todo 
+    #todo
     '''
-    return test_pre 
+    return test_pre
 #读取数据
 train=pd.read_csv('./data/train_v2.csv')
 test_pe=pd.read_csv('./data/wf_test_Nov_peri.csv')#按0.5h计算
@@ -225,11 +234,9 @@ test_period_A=date_feature(test_period_A)
 test_period_B=date_feature(test_period_B)
 # test_period_A.drop(['amount'],axis=1,inplace=True)
 # test_period_B.drop(['amount'],axis=1,inplace=True)
-print("训练集维度：",train_period_A.shape)
-print("测试集维度：",test_period_A.shape)
 
 #-----------------------树模型-----------------------
-feature=['periods','type','year','month','day','dayofweek','week_num','abs_period','day_num','abs_week','work_time1','q1']
+feature=['periods','type','year','month','day','dayofweek','week_num','abs_period','day_num','abs_week','work_time','q1']
 #-------筛选数据月份---------
 month_num=3
 #----------------------------
@@ -237,7 +244,8 @@ month_num=3
 # main
 BEST_FOLD_NUM_PE = -1
 BEST_FOLD_NUM_DAY = -1
-for folds in range(20, 40):
+#  find best k folds
+for folds in range(3, 40000):
     train_input=train_period_A#训练集
     # 由于跨越了2020年初的这段时间（疫情影响），所以，业务量会有不规则突变.只保留疫情后的，训练集数据仅选取2020年4月以后的数据。
     train_input=train_input[(train_input['year']==2020) & (train_input['month']>month_num)].reset_index(drop=True)
@@ -246,7 +254,6 @@ for folds in range(20, 40):
     train_y = train_input['amount']
     test_x = test_input[feature].copy()
     test_y = test_input['amount'].copy()
-    # print('特征维度A：',train_x.shape)
 
     xgb_test = xgb_model_A(train_x, train_y, test_x, test_y)
     pre_hour_A=[max(i,0) for i in xgb_test]
@@ -258,7 +265,6 @@ for folds in range(20, 40):
     train_y = train_input['amount']
     test_x = test_input[feature].copy()
     test_y = test_input['amount'].copy()
-    # print('特征维度B：',train_x.shape)
 
     xgb_test = xgb_model_B(train_x, train_y, test_x, test_y)
     pre_hour_B=[max(i,0) for i in xgb_test]
@@ -273,9 +279,8 @@ for folds in range(20, 40):
             pre_period.append(1e4*pre_hour_B[48*i+j])
 
     test_pe['amount']=pre_period
-    test_pe['amount']=(test_pe['amount']).astype(int)  
-    print(test_pe)
-    
+    test_pe['amount']=(test_pe['amount']).astype(int)
+
     # test_pe['date']=test_pe['date'].dt.strftime('%Y/%#m/%#d') # Return an Index of formatted strings specified by date_format
     #汇总预测结果得到test_day
     test_pe['date']=pd.to_datetime(test_pe['date'], format='%Y/%m/%d')
@@ -296,7 +301,7 @@ for folds in range(20, 40):
     test_day['amount_day_scaled']=(  test_day['amount_A']+test_day['amount_B']  ).astype(int).apply(lambda x:0 if x<200 else x)
     test_day.drop(['amount','amount_A','amount_B'],axis=1,inplace=True)
 
-    # 放缩操作 
+    # 放缩操作
     # 按天粗预测 调整系数后 预测准确率较高，将按period预测任务的每个时段占全天业务量的比例计算出来，乘任务一中每天的业务量，对于任务二的数据按比例放缩。 0.163-->0.147左右
 
     # 因为上面把test_day的amount放大了，所以amount_sum较小   test_day_A['amount']=test_day_A['amount']*1.07
@@ -324,20 +329,21 @@ for folds in range(20, 40):
     pe_score =my_mape(test_pe['amount'], gt_pe['amount'])
 
     if pe_score < LOW_MAPE_PE :
+        LOW_MAPE_PE  = pe_score
         BEST_FOLD_NUM_PE = folds
-        print('folds')
-        print(folds)
-        print("pe_score:" , pe_score)
+        logger.critical('BEST_FOLD_NUM_PE: %d'%(folds))
+        logger.critical('LOW_MAPE_PE  : %f'%(LOW_MAPE_PE  ))
         test_pe.to_csv('out/period.txt',sep=',',index=False)
 
     if day_score < LOW_MAPE_DAY :
+        LOW_MAPE_DAY = day_score
         BEST_FOLD_NUM_DAY = folds
-        print('folds')
-        print(folds)
-        print("day_score:" ,day_score)
+        logger.critical('BEST_FOLD_NUM_DAY : %d'%(BEST_FOLD_NUM_DAY ))
+        logger.critical('LOW_MAPE_DAY : %f'%(LOW_MAPE_DAY ))
         test_day.to_csv('out/day.txt',sep=',',index=False)
+    logger.critical('------------------------------')
 
-t2 = time.perf_counter() 
+t2 = time.perf_counter()
 print(t2-t1,' seconds')
 print('BEST_FOLD_NUM_PE',BEST_FOLD_NUM_PE )
 print('BEST_FOLD_NUM_DAY',BEST_FOLD_NUM_DAY )
