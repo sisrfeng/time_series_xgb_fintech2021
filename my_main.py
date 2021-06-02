@@ -66,7 +66,7 @@ params2 = {
     'seed': 2021,
     'nthread': 8,
 }
-folds = 5
+folds = 12
 #--------------------特征工程函数-------------------
 def pe_level(x):
     if x in range(18,25):
@@ -260,7 +260,7 @@ for idx_drop in range(1,2):
     # 由于跨越了2020年初的这段时间（疫情影响），所以，业务量会有不规则突变.只保留疫情后的，训练集数据仅选取2020年4月以后的数据。
     #  train_input=train_input[(train_input['year']==2020) & (train_input['month']>month_num)].reset_index(drop=True)
     train_input=train_input.reset_index(drop=True)
-    test_input=test_period_A#测试集
+    test_input=test_period_A #测试集
     train_x = train_input[feature].copy()
     train_y = train_input['amount']
     test_x = test_input[feature].copy()
@@ -269,7 +269,7 @@ for idx_drop in range(1,2):
     xgb_test = xgb_model_A(train_x, train_y, test_x, test_y)
     pre_hour_A=[max(i,0) for i in xgb_test]
 
-    train_input=train_period_B#训练集
+    train_input=train_period_B #训练集
     #  train_input=train_input[(train_input['year']==2020) & (train_input['month']>month_num)].reset_index(drop=True)
     train_input=train_input.reset_index(drop=True)
     test_input=test_period_B#测试集
